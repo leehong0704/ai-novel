@@ -1,6 +1,7 @@
 # AI小说生成器
 
-一个基于Python的AI小说创作工具，利用人工智能技术自动生成小说内容。
+一个基于Python的AI小说创作工具，利用人工智能技术自动生成小说内容。  
+📦 便捷下载：[`ai-novel.zip`](release/ai-novel.zip)（打包好的 Windows 发行版）
 
 ## 项目简介
 
