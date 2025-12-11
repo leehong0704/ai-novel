@@ -43,10 +43,29 @@ class NovelService:
         """将当前编辑器内容作为新章节，提示输入标题"""
         prompt_content = self.app.prompt_text.get("1.0", tk.END).strip()
         content = self.app.content_text.get("1.0", tk.END).strip()
+        # 将占位符视为无提示（不阻止新增）
+        if "请输入你的创作想法" in prompt_content:
+            prompt_content = ""
         
-        if not content:
-            messagebox.showwarning("提示", "生成内容为空，无法添加章节！")
-            return
+        # 若当前章节有未保存更改，先提示保存
+        try:
+            if hasattr(self.app, "current_chapter_index") and self.app.current_chapter_index is not None:
+                if self.has_unsaved_changes():
+                    should_save = messagebox.askyesno(
+                        "保存提示",
+                        "当前章节有未保存的更改，新增章节前是否先保存？\n\n点击'是'保存当前章节\n点击'否'继续新增（将丢失未保存更改）"
+                    )
+                    if should_save:
+                        if not self.save_current_chapter(silent=True, chapter_index=self.app.current_chapter_index):
+                            continue_add = messagebox.askyesno(
+                                "保存失败",
+                                "保存当前章节失败，是否仍要继续新增章节？\n\n点击'是'继续新增（将丢失未保存更改）\n点击'否'返回编辑"
+                            )
+                            if not continue_add:
+                                return
+        except Exception:
+            # 提示失败不应阻塞新增逻辑，继续后续流程
+            pass
         
         # 弹出对话框输入章节标题
         dialog = tk.Toplevel(self.app.root)
@@ -70,6 +89,23 @@ class NovelService:
             self.refresh_chapter_listbox()
             dialog.destroy()
             messagebox.showinfo("成功", f"已添加章节：{title}")
+            
+            # 新增后清空编辑区（提示与内容），避免沿用旧文本
+            try:
+                if hasattr(self.app, "prompt_text"):
+                    self.app.prompt_text.delete("1.0", tk.END)
+                if hasattr(self.app, "content_text"):
+                    self.app.content_text.delete("1.0", tk.END)
+                # 重置原始内容，用于后续未保存检测
+                self.app.original_chapter_prompt = ""
+                self.app.original_chapter_content = ""
+                # 更新字数与字符统计
+                if hasattr(self.app, "update_prompt_char_count"):
+                    self.app.update_prompt_char_count()
+                if hasattr(self.app, "update_word_count"):
+                    self.app.update_word_count()
+            except Exception:
+                pass
         
         tk.Button(dialog, text="确定", command=on_ok, width=10).pack(side=tk.LEFT, padx=20, pady=10)
         tk.Button(dialog, text="取消", command=dialog.destroy, width=10).pack(side=tk.RIGHT, padx=20, pady=10)
