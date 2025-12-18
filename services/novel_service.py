@@ -40,12 +40,14 @@ class NovelService:
             traceback.print_exc()
     
     def add_new_chapter_from_editor(self):
-        """将当前编辑器内容作为新章节，提示输入标题"""
-        prompt_content = self.app.prompt_text.get("1.0", tk.END).strip()
-        content = self.app.content_text.get("1.0", tk.END).strip()
-        # 将占位符视为无提示（不阻止新增）
-        if "请输入你的创作想法" in prompt_content:
-            prompt_content = ""
+        """
+        新增空白章节并提示输入标题。
+        
+        需求：新建章节后，新建章节的内容应该为空，因此不再从当前编辑器复制内容或创作提示。
+        """
+        # 不再读取当前编辑器内容，新章节默认为空
+        prompt_content = ""
+        content = ""
         
         # 若当前章节有未保存更改，先提示保存
         try:
@@ -84,6 +86,7 @@ class NovelService:
             if not title:
                 messagebox.showwarning("提示", "章节标题不能为空！", parent=dialog)
                 return
+            # 新章节内容与提示均为空，由后续编辑
             self.app.chapter_list.append({"title": title, "content": content, "prompt": prompt_content})
             self._persist_chapters_to_novel()
             self.refresh_chapter_listbox()
