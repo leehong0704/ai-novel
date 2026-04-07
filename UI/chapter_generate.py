@@ -1,74 +1,24 @@
 """
-章节生成页面
-负责创建和管理章节生成界面
+章节策划页面
+负责管理章节列表以及每章的剧情策划（标题、概述、高潮、钩子）
 """
 
 import tkinter as tk
 from tkinter import ttk, scrolledtext
 
-
 def create_chapter_generate_page(app, parent):
-    """创建章节生成页面"""
-    # 左侧：输入区域
+    """创建章节策划页面"""
+    # 左侧：章节管理
     left_panel = tk.Frame(parent)
     left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
-    # 当前章节索引（用于切换时自动保存）
-    app.current_chapter_index = None
-    # 用于检测章节内容是否改变
-    app.original_chapter_prompt = ""
-    app.original_chapter_content = ""
     
-    # 右侧：输出区域
-    right_panel = tk.Frame(parent)
-    right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
-    
-    # 创建垂直分割窗格
-    v_paned = tk.PanedWindow(right_panel, orient=tk.VERTICAL, sashwidth=6, sashrelief=tk.RAISED)
-    v_paned.pack(fill=tk.BOTH, expand=True)
-
-    # ========== 右侧：创作提示 ==========
-    prompt_frame = ttk.LabelFrame(v_paned, text="📝 创作提示", padding=15)
-    v_paned.add(prompt_frame, height=220)
-    
-    app.prompt_text = scrolledtext.ScrolledText(
-        prompt_frame,
-        font=("Microsoft YaHei", 11),
-        wrap=tk.WORD,
-        height=8
-    )
-    app.prompt_text.pack(fill=tk.BOTH, expand=True)
-    app.prompt_text.insert(
-        "1.0", 
-        "请输入你的创作想法、情节设定或续写提示...\n\n例如：\n- 主角是一个失忆的剑客\n- 故事发生在未来的赛博朋克世界\n- 续写：主角推开门，发现..."
-    )
-    # 绑定事件：先清除占位符，再保持章节选择状态
-    def on_prompt_focus_in(event):
-        app.clear_placeholder(event)
-        app.preserve_chapter_selection()
-    
-    app.prompt_text.bind("<FocusIn>", on_prompt_focus_in)
-    app.prompt_text.bind("<KeyRelease>", app.update_prompt_char_count)
-    # 保持章节列表选择状态
-    app.prompt_text.bind("<Button-1>", lambda e: app.preserve_chapter_selection())
-    
-    # 创作提示字数统计
-    app.prompt_char_count_label = tk.Label(
-        prompt_frame,
-        text="当前字数: 0 字",
-        font=("Microsoft YaHei", 9),
-        anchor=tk.E,
-        fg="#666666"
-    )
-    app.prompt_char_count_label.pack(side=tk.RIGHT, pady=(5, 0))
-    
-    # Generate Button (Moved to bottom of output_frame)
-    
-    # ========== 左侧：创作提示 ==========
-    # 章节管理（列表 + 按钮）
+    # 章节列表管理
     chapters_mgmt = ttk.LabelFrame(left_panel, text="📑 章节管理", padding=10)
     chapters_mgmt.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+    
     list_container = tk.Frame(chapters_mgmt)
     list_container.pack(fill=tk.BOTH, expand=True)
+    
     scrollbar = tk.Scrollbar(list_container, orient=tk.VERTICAL)
     app.chapter_listbox = tk.Listbox(
         list_container,
@@ -76,117 +26,147 @@ def create_chapter_generate_page(app, parent):
         font=("Microsoft YaHei", 10),
         yscrollcommand=scrollbar.set,
         selectmode=tk.SINGLE,
-        exportselection=False  # 防止焦点转移时丢失选择
+        exportselection=False
     )
     app.chapter_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     scrollbar.config(command=app.chapter_listbox.yview)
     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-    # 双击载入到编辑器
-    app.chapter_listbox.bind("<Double-Button-1>", lambda e: app.load_selected_chapter())
-    # 选择改变时自动载入到编辑器（静默）
-    app.chapter_listbox.bind("<<ListboxSelect>>", app.on_chapter_selected)
-
+    
+    # 绑定选择事件
+    app.chapter_listbox.bind("<<ListboxSelect>>", lambda e: app.on_chapter_selected(e, source="plan"))
+    
+    # 按钮组
     mgmt_btns = tk.Frame(chapters_mgmt)
     mgmt_btns.pack(fill=tk.X, pady=(8, 0))
-    tk.Button(mgmt_btns, text="➕ 新增", command=app.add_new_chapter_from_editor, cursor="hand2").pack(side=tk.LEFT)
-    tk.Button(mgmt_btns, text="📥 插入到所选位置", command=app.insert_chapter_at_selection, cursor="hand2").pack(side=tk.LEFT, padx=(10, 0))
-    tk.Button(mgmt_btns, text="✏️ 编辑标题", command=app.rename_selected_chapter, cursor="hand2").pack(side=tk.LEFT, padx=(10, 0))
+    tk.Button(mgmt_btns, text="➕ 新增章节", command=app.add_new_chapter_from_editor, cursor="hand2").pack(side=tk.LEFT)
+    tk.Button(mgmt_btns, text="📥 插入", command=app.insert_chapter_at_selection, cursor="hand2").pack(side=tk.LEFT, padx=(10, 0))
+    tk.Button(mgmt_btns, text="✏️ 标题", command=app.rename_selected_chapter, cursor="hand2").pack(side=tk.LEFT, padx=(10, 0))
     tk.Button(mgmt_btns, text="🗑️ 删除", command=app.delete_selected_chapter, cursor="hand2").pack(side=tk.LEFT, padx=(10, 0))
+    tk.Button(mgmt_btns, text="📤 导出全文", command=app.novel_service.export_novel_text, cursor="hand2", bg="#f8f9fa").pack(side=tk.RIGHT)
 
-    # 提示输入移至右侧
+    # 右侧：策划详情容器
+    right_panel = tk.Frame(parent)
+    right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
     
-    # 按钮框架已移除
-    # button_frame = tk.Frame(left_panel)
-    # button_frame.pack(fill=tk.X)
+    # 子标签页容器
+    sub_notebook = ttk.Notebook(right_panel)
+    sub_notebook.pack(fill=tk.BOTH, expand=True)
     
-    # app.generate_btn 移至右侧
-    # app.save_btn 已移除
-    # app.clear_btn 已移除
+    # ==================== Tab 1: 章节大纲 ====================
+    outline_tab = tk.Frame(sub_notebook, padx=10, pady=10)
+    sub_notebook.add(outline_tab, text="🎯 章节大纲")
     
-    # ========== 右侧：生成内容 ==========
-    output_frame = ttk.LabelFrame(v_paned, text="📖 生成内容", padding=15)
-    v_paned.add(output_frame)
+    # 章节大纲内容容器
+    plot_frame = tk.Frame(outline_tab)
+    plot_frame.pack(fill=tk.BOTH, expand=True)
     
-    # 字数统计 (Moved to bottom button frame)
+    # 1. 章节标题
+    title_info = tk.Frame(plot_frame)
+    title_info.pack(fill=tk.X, pady=(0, 10))
+    tk.Label(title_info, text="章节标题：", font=("Microsoft YaHei", 10)).pack(side=tk.LEFT)
+    app.chapter_title_var = tk.StringVar()
+    tk.Entry(title_info, textvariable=app.chapter_title_var, font=("Microsoft YaHei", 11)).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+    # 2. 章节细纲 (原内容概述)
+    prompt_header = tk.Frame(plot_frame)
+    prompt_header.pack(fill=tk.X, pady=(5, 5))
+    tk.Label(prompt_header, text="📑 章节细纲 (AI创作提示)：", font=("Microsoft YaHei", 10, "bold")).pack(side=tk.LEFT)
+    app.prompt_word_count_label = tk.Label(prompt_header, text="字数: 0", font=("Microsoft YaHei", 9), fg="gray")
+    app.prompt_word_count_label.pack(side=tk.RIGHT)
     
-    # 底部按钮区域
-    btns_frame = tk.Frame(output_frame)
-    btns_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
-    
-    app.generate_btn = tk.Button(
-        btns_frame,
-        text="🚀 生成小说",
-        command=app.generate_content,
-        font=("Microsoft YaHei", 11, "bold"),
-        bg="#1f77b4",
-        fg="white",
-        relief=tk.RAISED,
-        cursor="hand2",
-        height=1
-    )
-    app.generate_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
-    
-    
-    # 续写按钮（已隐藏，但保留逻辑代码）
-    app.modify_btn = tk.Button(
-        btns_frame,
-        text="🖊️ 续写小说",
-        command=app.continue_content,
+    app.prompt_text = scrolledtext.ScrolledText(
+        plot_frame,
         font=("Microsoft YaHei", 11),
-        bg="#ffc107",
-        fg="black",
-        relief=tk.RAISED,
-        cursor="hand2",
-        height=1
+        wrap=tk.WORD,
+        height=10
     )
-    # 隐藏续写按钮 - 如需恢复，取消下面这行的注释
-    # app.modify_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
+    app.prompt_text.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
     
-    # 保存按钮
-    save_btn = tk.Button(
-        btns_frame,
-        text="💾 保存章节",
+    # 绑定字数统计
+    def on_prompt_keypress(event=None):
+        if hasattr(app, 'update_prompt_char_count'):
+            app.update_prompt_char_count(event)
+    
+    app.prompt_text.bind("<KeyRelease>", on_prompt_keypress)
+
+    # 3. 章节高潮与钩子
+    grid_container = tk.Frame(plot_frame)
+    grid_container.pack(fill=tk.X, pady=5)
+    
+    # 高潮
+    tk.Label(grid_container, text="章节高潮：", font=("Microsoft YaHei", 10)).pack(anchor=tk.W)
+    app.chapter_climax_text = scrolledtext.ScrolledText(grid_container, height=3, font=("Microsoft YaHei", 10), wrap=tk.WORD)
+    app.chapter_climax_text.pack(fill=tk.X, pady=(0, 10))
+    
+    # 钩子
+    tk.Label(grid_container, text="章节钩子：", font=("Microsoft YaHei", 10)).pack(anchor=tk.W)
+    app.chapter_hook_text = scrolledtext.ScrolledText(grid_container, height=3, font=("Microsoft YaHei", 10), wrap=tk.WORD)
+    app.chapter_hook_text.pack(fill=tk.X, pady=(0, 10))
+
+    # 大纲页按钮
+    outline_btn_container = tk.Frame(outline_tab)
+    outline_btn_container.pack(fill=tk.X, pady=(5, 0))
+    
+    tk.Button(
+        outline_btn_container,
+        text="💾 保存大纲",
         command=app.save_current_chapter,
-        font=("Microsoft YaHei", 11),
+        font=("Microsoft YaHei", 9, "bold"),
         bg="#28a745",
         fg="white",
-        relief=tk.RAISED,
-        cursor="hand2",
-        height=1
-    )
-    save_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
+        height=1,
+        cursor="hand2"
+    ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
     
-    # 清空按钮
-    clear_btn = tk.Button(
-        btns_frame,
-        text="🗑️ 清空内容",
-        command=app.clear_content,
-        font=("Microsoft YaHei", 11),
-        bg="#dc3545",
+    tk.Button(
+        outline_btn_container,
+        text="🚀 AI 自动构思",
+        command=app.generate_outline,
+        font=("Microsoft YaHei", 9, "bold"),
+        bg="#6f42c1",
         fg="white",
-        relief=tk.RAISED,
-        cursor="hand2",
-        height=1
-    )
-    clear_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
+        height=1,
+        cursor="hand2"
+    ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
+
+    # ==================== Tab 2: 章节摘要 ====================
+    summary_tab = tk.Frame(sub_notebook, padx=10, pady=10)
+    sub_notebook.add(summary_tab, text="📝 章节总结")
     
-    # 字数统计标签
-    app.word_count_label = tk.Label(
-        btns_frame,
-        text="字数: 0",
-        font=("Microsoft YaHei", 10),
-        fg="#666666"
-    )
-    app.word_count_label.pack(side=tk.RIGHT, padx=(10, 0))
+    # 摘要内容容器
+    summary_scroll_container = tk.Frame(summary_tab)
+    summary_scroll_container.pack(fill=tk.BOTH, expand=True)
+
+    # 1. 全局摘要
+    tk.Label(summary_scroll_container, text="🌐 全局摘要 (精炼全书主线)：", font=("Microsoft YaHei", 10, "bold"), fg="#1f77b4").pack(anchor=tk.W, pady=(0, 5))
+    app.global_summary_text = scrolledtext.ScrolledText(summary_scroll_container, height=5, font=("Microsoft YaHei", 10), wrap=tk.WORD)
+    app.global_summary_text.pack(fill=tk.X, pady=(0, 15))
     
-    # 生成内容文本框
-    app.content_text = scrolledtext.ScrolledText(
-        output_frame,
-        font=("Microsoft YaHei", 11),
-        wrap=tk.WORD
+    # 2. 本章摘要
+    tk.Label(summary_scroll_container, text="🕒 本章摘要 (当前章节内容深度总结)：", font=("Microsoft YaHei", 10, "bold"), fg="#28a745").pack(anchor=tk.W, pady=(5, 5))
+    app.recent_summary_text = scrolledtext.ScrolledText(summary_scroll_container, height=6, font=("Microsoft YaHei", 10), wrap=tk.WORD)
+    app.recent_summary_text.pack(fill=tk.X, pady=(0, 15))
+    
+    # 3. 角色状态
+    tk.Label(summary_scroll_container, text="👤 角色状态 (当前各角色所处情况)：", font=("Microsoft YaHei", 10, "bold"), fg="#fd7e14").pack(anchor=tk.W, pady=(5, 5))
+    app.char_status_text = scrolledtext.ScrolledText(summary_scroll_container, height=6, font=("Microsoft YaHei", 10), wrap=tk.WORD)
+    app.char_status_text.pack(fill=tk.X, pady=(0, 15))
+
+    # 摘要页按钮
+    summary_btn_container = tk.Frame(summary_tab)
+    summary_btn_container.pack(fill=tk.X, pady=(10, 0))
+    
+    app.generate_summary_btn = tk.Button(
+        summary_btn_container,
+        text="✨ 生成/更新定稿摘要",
+        command=app.finalize_content,
+        font=("Microsoft YaHei", 10, "bold"),
+        bg="#17a2b8",
+        fg="white",
+        height=2,
+        cursor="hand2"
     )
-    app.content_text.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-    app.content_text.bind("<KeyRelease>", app.update_word_count)
-    # 保持章节列表选择状态
-    app.content_text.bind("<Button-1>", lambda e: app.preserve_chapter_selection())
-    app.content_text.bind("<FocusIn>", lambda e: app.preserve_chapter_selection())
+    app.generate_summary_btn.pack(fill=tk.X)
+
+    # 初始化变量
+    app.current_chapter_index = None

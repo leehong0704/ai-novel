@@ -25,7 +25,7 @@ class ConfigManager:
             - current_api: 当前选中的API配置名称
             - available_apis: 所有可用的API配置列表 [{name, api_key, api_base, model, temperature, max_tokens}, ...]
         """
-        config = configparser.ConfigParser()
+        config = configparser.ConfigParser(interpolation=None)
         os.makedirs("config", exist_ok=True)
         preferred_path = os.path.join("config", "config.ini")
         legacy_path = "config.ini"
@@ -135,7 +135,7 @@ class ConfigManager:
 # 默认温度参数，控制生成内容的随机性（0-1之间，越高越随机）
 temperature = 0.5
 # 默认最大生成token数量
-max_tokens = 5000
+max_tokens = 4000
 # 默认API请求超时时间（秒）
 timeout = 300
 
@@ -182,7 +182,7 @@ timeout = 300
     def save_config_value(section, key, value):
         """保存配置值到 config/config.ini"""
         try:
-            config = configparser.ConfigParser()
+            config = configparser.ConfigParser(interpolation=None)
             preferred_path = os.path.join("config", "config.ini")
             
             # 读取现有配置
@@ -210,7 +210,7 @@ timeout = 300
     def save_api_config(api_name, api_key, api_base, model, temperature, max_tokens, timeout=300):
         """保存或更新API配置（包含temperature、max_tokens和timeout）"""
         try:
-            config = configparser.ConfigParser()
+            config = configparser.ConfigParser(interpolation=None)
             preferred_path = os.path.join("config", "config.ini")
             
             # 读取现有配置
@@ -243,7 +243,7 @@ timeout = 300
     def delete_api_config(api_name):
         """删除API配置"""
         try:
-            config = configparser.ConfigParser()
+            config = configparser.ConfigParser(interpolation=None)
             preferred_path = os.path.join("config", "config.ini")
             
             # 读取现有配置

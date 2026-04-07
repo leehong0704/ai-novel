@@ -1,0 +1,39 @@
+[DEFAULT]
+# 默认温度参数，控制生成内容的随机性（0-1之间，越高越随机）
+temperature = 0.5
+# 默认最大生成token数量
+max_tokens = 8000
+
+[APP]
+# 当前使用的AI接口名称（对应下面的某个接口配置section）
+current_api = DEEPSEEK
+# 上次打开的小说文件路径（程序会自动更新此项）
+last_novel = 
+
+# ========== AI接口配置 ==========
+# 你可以配置多个AI接口，通过修改 [APP] 中的 current_api 来切换使用哪个接口
+# 每个接口配置需要包含：api_key, api_base, model, temperature, max_tokens 五个字段
+
+[DEEPSEEK]
+# DeepSeek API 配置
+api_key = 
+api_base = https://api.deepseek.com/v1
+model = deepseek-chat
+temperature = 0.5
+max_tokens = 8000
+
+[OPENAI]
+# OpenAI API 配置（示例）
+api_key = 
+api_base = https://api.openai.com/v1
+model = gpt-4
+temperature = 0.7
+max_tokens = 8000
+
+[GEMINI]
+# Google Gemini API 配置（示例）
+api_key = 
+api_base = https://generativelanguage.googleapis.com/v1beta
+model = gemini-2.0-flash-exp
+temperature = 0.6
+max_tokens = 8000

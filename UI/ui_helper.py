@@ -11,6 +11,16 @@ import traceback
 class UIHelper:
     """UI辅助工具类"""
     
+    @staticmethod
+    def center_window(window, width, height):
+        """将窗口居中显示"""
+        window.update_idletasks()
+        screen_width = window.winfo_screenwidth()
+        screen_height = window.winfo_screenheight()
+        x = (screen_width - width) // 2
+        y = (screen_height - height) // 2
+        window.geometry(f"{width}x{height}+{x}+{y}")
+
     def __init__(self, app):
         """
         初始化UI辅助工具
@@ -54,8 +64,8 @@ class UIHelper:
         self.app.word_count_label.config(text=f"当前字数: {word_count} 字")
     
     def update_prompt_char_count(self, event=None):
-        """更新创作提示字数统计"""
-        if not hasattr(self.app, "prompt_text") or not hasattr(self.app, "prompt_char_count_label"):
+        """更新细纲字数统计"""
+        if not hasattr(self.app, "prompt_text") or not hasattr(self.app, "prompt_word_count_label"):
             return
         content = self.app.prompt_text.get("1.0", tk.END).strip()
         # 排除占位符文本
@@ -63,7 +73,7 @@ class UIHelper:
             char_count = 0
         else:
             char_count = len(content)
-        self.app.prompt_char_count_label.config(text=f"当前字数: {char_count} 字")
+        self.app.prompt_word_count_label.config(text=f"字数: {char_count}")
     
     def show_loading_animation(self):
         """显示加载动画并锁定界面"""

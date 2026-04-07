@@ -62,31 +62,46 @@ def create_novel_settings_page(app, parent):
     tk.Label(novel_info_frame, text="写作风格:", font=("Microsoft YaHei", 10)).grid(
         row=row, column=0, sticky=tk.W, pady=15, padx=10
     )
-    app.writing_style_var = tk.StringVar(value="平实自然")
-    writing_style_entry = tk.Entry(
+    app.writing_style_text = scrolledtext.ScrolledText(
         novel_info_frame,
-        textvariable=app.writing_style_var,
-        font=("Microsoft YaHei", 11),
-        width=40
+        font=("Microsoft YaHei", 10),
+        width=40,
+        height=2,
+        wrap=tk.WORD
     )
-    writing_style_entry.grid(row=row, column=1, sticky=tk.EW, pady=15, padx=10)
+    app.writing_style_text.insert("1.0", "平实自然")
+    app.writing_style_text.grid(row=row, column=1, sticky=tk.EW, pady=15, padx=10)
 
-    # 小说主题（多行）
+    # 思想宗旨（多行）
     row = 4
-    tk.Label(novel_info_frame, text="小说主题:", font=("Microsoft YaHei", 10)).grid(
+    tk.Label(novel_info_frame, text="思想宗旨:", font=("Microsoft YaHei", 10)).grid(
         row=row, column=0, sticky=tk.W, pady=15, padx=10
     )
     app.novel_theme_text = scrolledtext.ScrolledText(
         novel_info_frame,
         font=("Microsoft YaHei", 10),
         width=40,
-        height=4,
+        height=3,
         wrap=tk.WORD
     )
     app.novel_theme_text.grid(row=row, column=1, sticky=tk.EW, pady=15, padx=10)
 
-    # 章节字数
+    # 剧情主线（多行）
     row = 5
+    tk.Label(novel_info_frame, text="剧情主线:", font=("Microsoft YaHei", 10)).grid(
+        row=row, column=0, sticky=tk.W, pady=15, padx=10
+    )
+    app.novel_outline_text = scrolledtext.ScrolledText(
+        novel_info_frame,
+        font=("Microsoft YaHei", 10),
+        width=40,
+        height=4,
+        wrap=tk.WORD
+    )
+    app.novel_outline_text.grid(row=row, column=1, sticky=tk.EW, pady=15, padx=10)
+
+    # 章节字数
+    row = 6
     tk.Label(novel_info_frame, text="章节字数:", font=("Microsoft YaHei", 10)).grid(
         row=row, column=0, sticky=tk.W, pady=15, padx=10
     )
@@ -117,7 +132,7 @@ def create_novel_settings_page(app, parent):
     word_count_hint.pack(side=tk.LEFT, padx=(10, 0))
 
     # 操作按钮行
-    row = 6
+    row = 7
     btns_frame = tk.Frame(novel_info_frame)
     btns_frame.grid(row=row, column=0, columnspan=2, sticky=tk.EW, pady=(5, 0), padx=10)
     btns_frame.columnconfigure(0, weight=1)
@@ -172,3 +187,6 @@ def create_novel_settings_page(app, parent):
         height=1
     )
     export_btn.grid(row=0, column=3, sticky=tk.EW, padx=5)
+
+
+

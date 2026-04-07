@@ -43,7 +43,7 @@ class PersistenceService:
             chapters_dir = os.path.join(self.app.current_novel_dir, "chapters")
             os.makedirs(chapters_dir, exist_ok=True)
             
-            config = configparser.ConfigParser()
+            config = configparser.ConfigParser(interpolation=None)
             if os.path.exists(novel_ini_path):
                 config.read(novel_ini_path, encoding='utf-8')
             
@@ -54,10 +54,22 @@ class PersistenceService:
                 config.remove_section("CHAPTER_TITLES")
             if "CHAPTER_PROMPTS" in config:
                 config.remove_section("CHAPTER_PROMPTS")
+            if "CHAPTER_CLIMAXES" in config:
+                config.remove_section("CHAPTER_CLIMAXES")
+            if "CHAPTER_HOOKS" in config:
+                config.remove_section("CHAPTER_HOOKS")
+            if "CHAPTER_SCENES" in config:
+                config.remove_section("CHAPTER_SCENES")
+            if "CHAPTER_NUMS" in config:
+                config.remove_section("CHAPTER_NUMS")
             
             config.add_section("CHAPTERS")
             config.add_section("CHAPTER_TITLES")
             config.add_section("CHAPTER_PROMPTS")
+            config.add_section("CHAPTER_CLIMAXES")
+            config.add_section("CHAPTER_HOOKS")
+            config.add_section("CHAPTER_SCENES")
+            config.add_section("CHAPTER_NUMS")
             
             # 保存每个章节
             for idx, chapter in enumerate(self.app.chapter_list):
@@ -67,9 +79,14 @@ class PersistenceService:
                 title = chapter.get("title", f"未命名章节{idx+1}")
                 content = chapter.get("content", "")
                 prompt = chapter.get("prompt", "")
+                climax = chapter.get("climax", "")
+                hook = chapter.get("hook", "")
+                scenes = chapter.get("scenes", "")
+                num = chapter.get("num", str(idx+1))
                 
                 # 写入章节文件
                 with open(chapter_file_path, "w", encoding="utf-8") as f:
+                    # 可以在此处通过注释或其他方式额外记录元数据，如高潮/钩子等（可选）
                     f.write(f"第{idx+1}章 {title}\n\n")
                     f.write(content)
                 
@@ -77,6 +94,10 @@ class PersistenceService:
                 config.set("CHAPTERS", str(idx), chapter_filename)
                 config.set("CHAPTER_TITLES", str(idx), title)
                 config.set("CHAPTER_PROMPTS", str(idx), prompt)
+                config.set("CHAPTER_CLIMAXES", str(idx), climax)
+                config.set("CHAPTER_HOOKS", str(idx), hook)
+                config.set("CHAPTER_SCENES", str(idx), scenes.replace("\n", "[\\n]")) # 转义换行
+                config.set("CHAPTER_NUMS", str(idx), num)
             
             # 写入配置文件
             with open(novel_ini_path, "w", encoding="utf-8") as f:
@@ -98,7 +119,7 @@ class PersistenceService:
             章节列表，格式为 [{"title": "...", "content": "...", "prompt": "..."}, ...]
         """
         try:
-            config = configparser.ConfigParser()
+            config = configparser.ConfigParser(interpolation=None)
             config.read(novel_ini_path, encoding="utf-8")
             novel_dir = os.path.dirname(novel_ini_path)
             
@@ -137,6 +158,13 @@ class PersistenceService:
                 if "CHAPTER_PROMPTS" in config and str(idx) in config["CHAPTER_PROMPTS"]:
                     prompt = config["CHAPTER_PROMPTS"][str(idx)]
                 
+                # 读取策划信息
+                climax = config.get("CHAPTER_CLIMAXES", str(idx), fallback="")
+                hook = config.get("CHAPTER_HOOKS", str(idx), fallback="")
+                scenes_raw = config.get("CHAPTER_SCENES", str(idx), fallback="")
+                scenes = scenes_raw.replace("[\\n]", "\n")
+                num = config.get("CHAPTER_NUMS", str(idx), fallback=str(int(idx)+1))
+
                 # 读取内容
                 content = ""
                 if "CHAPTERS" in config and str(idx) in config["CHAPTERS"]:
@@ -159,9 +187,13 @@ class PersistenceService:
                         content = ""
                 
                 chapter_list.append({
-                    "title": title,
-                    "content": content,
-                    "prompt": prompt
+                    "title": title, 
+                    "content": content, 
+                    "prompt": prompt,
+                    "climax": climax,
+                    "hook": hook,
+                    "scenes": scenes,
+                    "num": num
                 })
             
             print(f"[信息] 已加载 {len(chapter_list)} 个章节")
@@ -171,6 +203,36 @@ class PersistenceService:
             traceback.print_exc()
             return []
     
+    def export_to_single_text(self, export_path, chapter_list):
+        """
+        根据章节列表导出完整的长文本文件
+        """
+        try:
+            with open(export_path, "w", encoding="utf-8", newline='') as f:
+                for idx, chapter in enumerate(chapter_list):
+                    title = chapter.get("title", f"第{idx+1}章")
+                    content = chapter.get("content", "").strip()
+                    
+                    # 写入章节标题头
+                    f.write(f"第{idx+1}章 {title}\r\n")
+                    f.write("-" * 30 + "\r\n")
+                    
+                    if content:
+                        # 确保内容中的换行符为 \r\n
+                        normalized_content = content.replace("\r\n", "\n").replace("\n", "\r\n")
+                        f.write(normalized_content)
+                    else:
+                        f.write("（本章正文内容为空）")
+                    
+                    # 章节间格
+                    f.write("\r\n\r\n\r\n")
+                    
+            return True
+        except Exception as e:
+            print(f"[错误] 导出全文文本失败: {e}")
+            traceback.print_exc()
+            return False
+
     # ==================== 小说配置持久化 ====================
     
     def save_novel_config(self, target_dir=None):
@@ -192,7 +254,7 @@ class PersistenceService:
             os.makedirs(target_dir, exist_ok=True)
             novel_ini = os.path.join(target_dir, "novel.ini")
             
-            config = configparser.ConfigParser()
+            config = configparser.ConfigParser(interpolation=None)
             if os.path.exists(novel_ini):
                 config.read(novel_ini, encoding="utf-8")
             
@@ -204,8 +266,9 @@ class PersistenceService:
             # 保存基础信息
             config["BASIC"]["title"] = self.app.title_entry.get().strip() if hasattr(self.app, "title_entry") else ""
             config["BASIC"]["type"] = self.app.novel_type_var.get() if hasattr(self.app, "novel_type_var") else "其他"
-            config["BASIC"]["style"] = self.app.writing_style_var.get() if hasattr(self.app, "writing_style_var") else "平实自然"
+            config["BASIC"]["style"] = (self.app.writing_style_text.get("1.0", tk.END).strip() if hasattr(self.app, "writing_style_text") else (self.app.writing_style_var.get().strip() if hasattr(self.app, "writing_style_var") else "平实自然"))
             config["BASIC"]["theme"] = (self.app.novel_theme_text.get("1.0", "end-1c").strip() if hasattr(self.app, "novel_theme_text") else (self.app.novel_theme_var.get().strip() if hasattr(self.app, "novel_theme_var") else ""))
+            config["BASIC"]["outline"] = (self.app.novel_outline_text.get("1.0", "end-1c").strip() if hasattr(self.app, "novel_outline_text") else "")
             config["BASIC"]["chapter_words"] = str(self.app.chapter_words_var.get()) if hasattr(self.app, "chapter_words_var") else "3000"
             
             if "chapters_path" not in config["META"]:
@@ -235,7 +298,7 @@ class PersistenceService:
             
             novel_ini = os.path.join(self.app.current_novel_dir, "novel.ini")
             
-            config = configparser.ConfigParser()
+            config = configparser.ConfigParser(interpolation=None)
             if os.path.exists(novel_ini):
                 config.read(novel_ini, encoding="utf-8")
             
@@ -312,7 +375,7 @@ class PersistenceService:
             config_data = ConfigManager.load_config()
             if config_data:
                 # 读取配置文件获取 last_novel
-                config = configparser.ConfigParser()
+                config = configparser.ConfigParser(interpolation=None)
                 preferred_path = os.path.join("config", "config.ini")
                 if os.path.exists(preferred_path):
                     config.read(preferred_path, encoding='utf-8')

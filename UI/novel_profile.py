@@ -14,9 +14,9 @@ def create_novel_profile_page(app, parent):
     root_frame = tk.Frame(parent)
     root_frame.pack(fill=tk.BOTH, expand=True)
 
-    # 左侧：小说设定列表
+    # 小说设定列表（放置在右侧）
     left_frame = ttk.LabelFrame(root_frame, text="小说设定列表", padding=10)
-    left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+    left_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
     left_frame.columnconfigure(0, weight=1)
     left_frame.rowconfigure(0, weight=1)
 
@@ -189,6 +189,162 @@ def create_novel_profile_page(app, parent):
                 self.selected_name = None
             # caller can call rebuild() to normalize rows
 
+    def create_character_dialog(dialog_title, initial_name="", initial_content=""):
+        win = tk.Toplevel(parent)
+        win.title(dialog_title)
+        win.transient(parent)
+        win.grab_set()
+        app.ui_helper.center_window(win, 560, 650)
+
+        # 简单的内容解析（支持回填）
+        fields = {
+            '角色设定': '', '性别': '', '年龄': '', '身份': '',
+            '性格': '', '特点': '', '外貌': '', '服饰': ''
+        }
+        if initial_content:
+            lines = initial_content.splitlines()
+            for line in lines:
+                if '：' in line:
+                    parts = line.split('：', 1)
+                    k, v = parts[0].strip(), parts[1].strip()
+                    if k in fields:
+                        fields[k] = v
+
+        body = tk.Frame(win, padx=20, pady=15)
+        body.pack(fill=tk.BOTH, expand=True)
+
+        row = 0
+        def add_field(label_text, value="", field_type="entry", combo_values=None):
+            nonlocal row
+            tk.Label(body, text=label_text, font=("Microsoft YaHei", 10)).grid(row=row, column=0, sticky=tk.W, pady=5)
+            if field_type == "entry":
+                var = tk.StringVar(value=value or "")
+                entry = tk.Entry(body, textvariable=var, font=("Microsoft YaHei", 10))
+                entry.grid(row=row, column=1, sticky=tk.EW, pady=5, padx=(10, 0))
+                row += 1
+                return var
+            elif field_type == "combo":
+                default_val = value or (combo_values[0] if combo_values else "男")
+                var = tk.StringVar(value=default_val)
+                vals = combo_values if combo_values else ["男", "女", "其他"]
+                combo = ttk.Combobox(body, textvariable=var, values=vals, state="readonly", font=("Microsoft YaHei", 10))
+                combo.grid(row=row, column=1, sticky=tk.EW, pady=5, padx=(10, 0))
+                row += 1
+                return var
+            elif field_type == "text":
+                txt = scrolledtext.ScrolledText(body, font=("Microsoft YaHei", 10), height=3, wrap=tk.WORD)
+                txt.grid(row=row, column=1, sticky=tk.NSEW, pady=5, padx=(10, 0))
+                txt.insert("1.0", value or "")
+                row += 1
+                return txt
+
+        name_var = add_field("名字：", initial_name)
+        role_var = add_field(
+            "角色设定：", 
+            fields['角色设定'], 
+            field_type="combo", 
+            combo_values=["主角", "男主角", "女主角", "男配角", "女配角", "工具人", "反派", "其他"]
+        )
+        gender_var = add_field("性别：", fields['性别'], field_type="combo")
+        age_var = add_field("年龄：", fields['年龄'])
+        identity_var = add_field("身份：", fields['身份'])
+        personality_text = add_field("性格：", fields['性格'], field_type="text")
+        trait_text = add_field("特点：", fields['特点'], field_type="text")
+        appearance_text = add_field("外貌：", fields['外貌'], field_type="text")
+        clothing_text = add_field("服饰：", fields['服饰'], field_type="text")
+
+        body.columnconfigure(1, weight=1)
+
+        result = {}
+        def on_ok():
+            name = name_var.get().strip()
+            if not name:
+                messagebox.showwarning("提示", "名字不能为空！", parent=win)
+                return
+            
+            # 组织内容字符串
+            content_lines = []
+            def add_line(k, v):
+                cleaned_v = v.get("1.0", tk.END).strip() if isinstance(v, (tk.Text, scrolledtext.ScrolledText)) else v.get().strip()
+                if cleaned_v: content_lines.append(f"{k}：{cleaned_v}")
+            
+            add_line("角色设定", role_var)
+            add_line("性别", gender_var)
+            add_line("年龄", age_var)
+            add_line("身份", identity_var)
+            add_line("性格", personality_text)
+            add_line("特点", trait_text)
+            add_line("外貌", appearance_text)
+            add_line("服饰", clothing_text)
+            
+            result["value"] = (name, "\n".join(content_lines))
+            win.destroy()
+
+        footer = tk.Frame(win, padx=20, pady=10)
+        footer.pack(fill=tk.X, side=tk.BOTTOM)
+        tk.Button(footer, text="保存", command=on_ok, bg="#28a745", fg="white", cursor="hand2", width=10).pack(side=tk.RIGHT, padx=5)
+        tk.Button(footer, text="取消", command=win.destroy, cursor="hand2", width=10).pack(side=tk.RIGHT, padx=5)
+
+        win.wait_window()
+        return result.get("value")
+
+    def create_novel_setting_dialog(dialog_title, initial_name="", initial_content=""):
+        win = tk.Toplevel(parent)
+        win.title(dialog_title)
+        win.transient(parent)
+        win.grab_set()
+        app.ui_helper.center_window(win, 540, 450)
+
+        # 尝试从内容字符串中解析类别
+        category = "其他"
+        actual_content = initial_content
+        if initial_content and "类别：" in initial_content:
+            lines = initial_content.splitlines()
+            if lines and lines[0].startswith("类别："):
+                category = lines[0].replace("类别：", "").strip()
+                if len(lines) > 1 and lines[1].startswith("内容："):
+                    actual_content = "\n".join(lines[1:]).replace("内容：", "", 1).strip()
+                else:
+                    actual_content = "\n".join(lines[1:]).strip()
+
+        body = tk.Frame(win, padx=20, pady=15)
+        body.pack(fill=tk.BOTH, expand=True)
+
+        tk.Label(body, text="名称：", font=("Microsoft YaHei", 10)).grid(row=0, column=0, sticky=tk.W, pady=5)
+        name_var = tk.StringVar(value=initial_name)
+        tk.Entry(body, textvariable=name_var, font=("Microsoft YaHei", 11)).grid(row=0, column=1, sticky=tk.EW, pady=5, padx=(10, 0))
+
+        tk.Label(body, text="类别：", font=("Microsoft YaHei", 10)).grid(row=1, column=0, sticky=tk.W, pady=5)
+        cat_var = tk.StringVar(value=category)
+        ttk.Combobox(body, textvariable=cat_var, values=["环境", "物品", "规则", "名词解释", "其他"], state="readonly", font=("Microsoft YaHei", 10)).grid(row=1, column=1, sticky=tk.EW, pady=5, padx=(10, 0))
+
+        tk.Label(body, text="内容：", font=("Microsoft YaHei", 10)).grid(row=2, column=0, sticky=tk.NW, pady=5)
+        content_text = scrolledtext.ScrolledText(body, font=("Microsoft YaHei", 10), height=10, wrap=tk.WORD)
+        content_text.grid(row=2, column=1, sticky=tk.NSEW, pady=5, padx=(10, 0))
+        content_text.insert("1.0", actual_content)
+
+        body.columnconfigure(1, weight=1)
+        body.rowconfigure(2, weight=1)
+
+        result = {}
+        def on_ok():
+            n = name_var.get().strip()
+            c = content_text.get("1.0", tk.END).strip()
+            cat = cat_var.get()
+            if not n:
+                messagebox.showwarning("提示", "名称不能为空！", parent=win)
+                return
+            result["value"] = (n, f"类别：{cat}\n内容：{c}")
+            win.destroy()
+
+        footer = tk.Frame(win, padx=20, pady=10)
+        footer.pack(fill=tk.X, side=tk.BOTTOM)
+        tk.Button(footer, text="保存", command=on_ok, bg="#28a745", fg="white", cursor="hand2", width=10).pack(side=tk.RIGHT, padx=5)
+        tk.Button(footer, text="取消", command=win.destroy, cursor="hand2", width=10).pack(side=tk.RIGHT, padx=5)
+
+        win.wait_window()
+        return result.get("value")
+
     def create_item_with_content(dialog_title, name_label):
         win = tk.Toplevel(parent)
         win.title(dialog_title)
@@ -252,7 +408,7 @@ def create_novel_profile_page(app, parent):
             if not novel_dir:
                 return
             ini_path = os.path.join(novel_dir, "novel.ini")
-            cfg = configparser.ConfigParser()
+            cfg = configparser.ConfigParser(interpolation=None)
             if os.path.exists(ini_path):
                 cfg.read(ini_path, encoding="utf-8")
             if section not in cfg:
@@ -269,7 +425,7 @@ def create_novel_profile_page(app, parent):
             if not novel_dir:
                 return
             ini_path = os.path.join(novel_dir, "novel.ini")
-            cfg = configparser.ConfigParser()
+            cfg = configparser.ConfigParser(interpolation=None)
             if os.path.exists(ini_path):
                 cfg.read(ini_path, encoding="utf-8")
             if section in cfg and name in cfg[section]:
@@ -294,7 +450,7 @@ def create_novel_profile_page(app, parent):
                 return False
             os.makedirs(novel_dir, exist_ok=True)
             ini_path = os.path.join(novel_dir, "novel.ini")
-            cfg = configparser.ConfigParser()
+            cfg = configparser.ConfigParser(interpolation=None)
             if os.path.exists(ini_path):
                 cfg.read(ini_path, encoding="utf-8")
             if section not in cfg:
@@ -308,7 +464,7 @@ def create_novel_profile_page(app, parent):
             return False
 
     def create_novel_setting_item():
-        res = create_item_with_content("创建设置", "名称：")
+        res = create_novel_setting_dialog("创建小说设置")
         if res:
             name, content = res
             app.novel_setting_details[name] = content
@@ -323,9 +479,9 @@ def create_novel_profile_page(app, parent):
     tk.Button(left_btns, text="编辑", command=lambda: edit_selected_item("NOVEL_SETTINGS", "left", "编辑设置"), cursor="hand2").pack(side=tk.RIGHT, padx=(6,0))
     tk.Button(left_btns, text="＋ 创建", command=create_novel_setting_item, cursor="hand2").pack(side=tk.RIGHT)
 
-    # 右侧：人物设定列表
+    # 人物设定列表（放置在左侧）
     right_frame = ttk.LabelFrame(root_frame, text="人物设定列表", padding=10)
-    right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
+    right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
     right_frame.columnconfigure(0, weight=1)
     right_frame.rowconfigure(0, weight=1)
 
@@ -336,7 +492,7 @@ def create_novel_profile_page(app, parent):
     app.character_setting_checks = ScrollCheckList(right_list_container, lambda n: app.character_setting_details.get(n, ""))
 
     def create_character_setting_item():
-        res = create_item_with_content("创建人物", "名称：")
+        res = create_character_dialog("创建人物设定")
         if res:
             name, content = res
             app.character_setting_details[name] = content
@@ -358,7 +514,7 @@ def create_novel_profile_page(app, parent):
                 messagebox.showwarning("提示", "请先创建或读取小说配置（novel.ini）后再操作。", parent=parent)
                 return False
             ini_path = os.path.join(novel_dir, "novel.ini")
-            cfg = configparser.ConfigParser()
+            cfg = configparser.ConfigParser(interpolation=None)
             if os.path.exists(ini_path):
                 cfg.read(ini_path, encoding="utf-8")
             if section not in cfg or name not in cfg[section]:
@@ -428,68 +584,50 @@ def create_novel_profile_page(app, parent):
             
             old_name = selected_name
             old_content = store.get(old_name, "")
-            # 弹出编辑对话框
-            win = tk.Toplevel(parent)
-            win.title(title)
-            win.transient(parent)
-            win.grab_set()
-            win.geometry("540x380")
-            body = tk.Frame(win, padx=16, pady=12)
-            body.pack(fill=tk.BOTH, expand=True)
-            tk.Label(body, text="名称：", font=("Microsoft YaHei", 10)).grid(row=0, column=0, sticky=tk.W, pady=(0, 10))
-            name_var = tk.StringVar(value=old_name)
-            name_entry = tk.Entry(body, textvariable=name_var, font=("Microsoft YaHei", 10))
-            name_entry.grid(row=0, column=1, sticky=tk.EW, pady=(0, 10))
-            tk.Label(body, text="内容：", font=("Microsoft YaHei", 10)).grid(row=1, column=0, sticky=tk.NW)
-            content_text = scrolledtext.ScrolledText(body, font=("Microsoft YaHei", 10), height=12, wrap=tk.WORD)
-            content_text.grid(row=1, column=1, sticky=tk.NSEW)
-            content_text.insert("1.0", old_content)
-            body.columnconfigure(1, weight=1)
-            body.rowconfigure(1, weight=1)
-
-            def on_save():
-                new_name = name_var.get().strip()
-                new_content = content_text.get("1.0", tk.END).strip()
-                if not new_name:
-                    messagebox.showwarning("提示", "名称不能为空！", parent=win)
+            
+            # 根据所属板块选择对话框
+            if section == "CHARACTERS":
+                res = create_character_dialog(title, old_name, old_content)
+                if not res: return
+                new_name, new_content = res
+            else:
+                # 增强的小说设定对话框
+                res = create_novel_setting_dialog(title, old_name, old_content)
+                if not res: return
+                new_name, new_content = res
+            # 后续逻辑统一处理保存
+            # 如果重命名，先删旧key
+            if new_name != old_name:
+                if not delete_from_ini(section, old_name):
                     return
-                # 如果重命名，先删旧key
-                if new_name != old_name:
-                    if not delete_from_ini(section, old_name):
-                        return
-                # 写新值
-                if not persist_item_to_ini(section, new_name, new_content):
-                    return
-                # 更新内存与列表
-                if old_name in store:
-                    del store[old_name]
-                store[new_name] = new_content
-                # 搬运勾选状态
-                checked = False
-                if section == "NOVEL_SETTINGS":
-                    checked = app.novel_setting_checked.get(old_name, False)
-                    if old_name in app.novel_setting_checked:
-                        del app.novel_setting_checked[old_name]
-                    app.novel_setting_checked[new_name] = checked
-                    app.novel_setting_checks.rebuild(app.novel_setting_details, app.novel_setting_checked)
-                    # 同步 ini 选中状态：删旧写新
-                    delete_selection_entry("NOVEL_SETTINGS_SELECTED", old_name)
-                    update_selection_entry("NOVEL_SETTINGS_SELECTED", new_name, checked)
-                else:
-                    checked = app.character_setting_checked.get(old_name, False)
-                    if old_name in app.character_setting_checked:
-                        del app.character_setting_checked[old_name]
-                    app.character_setting_checked[new_name] = checked
-                    app.character_setting_checks.rebuild(app.character_setting_details, app.character_setting_checked)
-                    delete_selection_entry("CHARACTERS_SELECTED", old_name)
-                    update_selection_entry("CHARACTERS_SELECTED", new_name, checked)
-                win.destroy()
-                messagebox.showinfo("成功", "✅ 已保存到配置。", parent=parent)
-
-            footer = tk.Frame(win, padx=16, pady=8)
-            footer.pack(fill=tk.X, side=tk.BOTTOM)
-            tk.Button(footer, text="取消", command=win.destroy, cursor="hand2").pack(side=tk.RIGHT, padx=6)
-            tk.Button(footer, text="保存", command=on_save, bg="#28a745", fg="white", cursor="hand2").pack(side=tk.RIGHT, padx=6)
+            # 写新值
+            if not persist_item_to_ini(section, new_name, new_content):
+                return
+            # 更新内存与列表
+            if old_name in store:
+                del store[old_name]
+            store[new_name] = new_content
+            # 搬运勾选状态
+            checked = False
+            if section == "NOVEL_SETTINGS":
+                checked = app.novel_setting_checked.get(old_name, False)
+                if old_name in app.novel_setting_checked:
+                    del app.novel_setting_checked[old_name]
+                app.novel_setting_checked[new_name] = checked
+                app.novel_setting_checks.rebuild(app.novel_setting_details, app.novel_setting_checked)
+                # 同步 ini 选中状态：删旧写新
+                delete_selection_entry("NOVEL_SETTINGS_SELECTED", old_name)
+                update_selection_entry("NOVEL_SETTINGS_SELECTED", new_name, checked)
+            else:
+                checked = app.character_setting_checked.get(old_name, False)
+                if old_name in app.character_setting_checked:
+                    del app.character_setting_checked[old_name]
+                app.character_setting_checked[new_name] = checked
+                app.character_setting_checks.rebuild(app.character_setting_details, app.character_setting_checked)
+                delete_selection_entry("CHARACTERS_SELECTED", old_name)
+                update_selection_entry("CHARACTERS_SELECTED", new_name, checked)
+            
+            messagebox.showinfo("成功", "✅ 已从新对话框完成保存。", parent=parent)
         except Exception as e:
             messagebox.showerror("错误", f"编辑失败: {str(e)}", parent=parent)
 

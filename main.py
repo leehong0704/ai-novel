@@ -21,6 +21,7 @@ from UI.ai_settings import create_ai_settings_page as external_create_ai_setting
 from UI.novel_settings import create_novel_settings_page as external_create_novel_settings_page
 from UI.novel_profile import create_novel_profile_page as external_create_novel_profile_page
 from UI.chapter_generate import create_chapter_generate_page as external_create_chapter_generate_page
+from UI.content_generate import create_content_generate_page as external_create_content_generate_page
 
 # 业务模块
 from AI.ai_client import AIClient
@@ -60,8 +61,8 @@ class NovelGeneratorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("AI小说生成器")
-        self.root.geometry("1200x800")
-        self.root.minsize(1000, 600)
+        self.root.geometry("1440x900")
+        self.root.minsize(1200, 800)
         
         # 数据存储
         self.novel_title = ""
@@ -100,7 +101,7 @@ class NovelGeneratorApp:
 
         # 尝试自动加载上次打开的小说
         try:
-            cfg = configparser.ConfigParser()
+            cfg = configparser.ConfigParser(interpolation=None)
             cfg_path = os.path.join("config", "config.ini")
             if os.path.exists(cfg_path):
                 cfg.read(cfg_path, encoding='utf-8')
@@ -157,11 +158,17 @@ class NovelGeneratorApp:
         external_create_novel_profile_page(self, novel_profile_frame)
         self.novel_profile_frame = novel_profile_frame
 
-        # ========== 页面3: 章节生成 ==========
+        # ========== 页面3: 章节大纲 ==========
         chapter_generate_frame = tk.Frame(notebook, padx=20, pady=20)
-        notebook.add(chapter_generate_frame, text="✍️ 章节生成")
+        notebook.add(chapter_generate_frame, text="🎯 章节大纲")
         self.create_chapter_generate_page(chapter_generate_frame)
         self.chapter_generate_frame = chapter_generate_frame
+
+        # ========== 页面4: 正文生成 ==========
+        content_generate_frame = tk.Frame(notebook, padx=20, pady=20)
+        notebook.add(content_generate_frame, text="✍️ 正文生成")
+        external_create_content_generate_page(self, content_generate_frame)
+        self.content_generate_frame = content_generate_frame
 
         # 初始根据是否存在小说配置，控制可访问性
         self.update_tab_access()
@@ -227,6 +234,15 @@ class NovelGeneratorApp:
         """续写小说（独立逻辑）"""
         self.generation_service.continue_content()
 
+    def summarize_chapter(self):
+        """总结当前章节内容"""
+        self.generation_service.summarize_chapter()
+
+    def finalize_content(self):
+        """生成定稿摘要（全文提要及近三章回顾）"""
+        self.generation_service.finalize_content()
+
+
     def has_novel_config(self):
         """是否已选择并存在小说配置 novel.ini"""
         try:
@@ -247,12 +263,15 @@ class NovelGeneratorApp:
                 self.notebook.tab(self.novel_profile_frame, state=("normal" if has_cfg else "disabled"))
             if hasattr(self, "chapter_generate_frame"):
                 self.notebook.tab(self.chapter_generate_frame, state=("normal" if has_cfg else "disabled"))
+            if hasattr(self, "content_generate_frame"):
+                self.notebook.tab(self.content_generate_frame, state=("normal" if has_cfg else "disabled"))
             # 如果当前在被禁用的页面上，切回首页
             try:
                 current = self.notebook.select()
                 if not has_cfg and current in (
                     str(self.novel_profile_frame),
                     str(self.chapter_generate_frame),
+                    str(self.content_generate_frame),
                 ):
                     # 切换到第一个标签
                     self.notebook.select(0)
@@ -267,6 +286,10 @@ class NovelGeneratorApp:
     def refresh_chapter_listbox(self):
         """刷新章节列表显示"""
         self.novel_service.refresh_chapter_listbox()
+    
+    def refresh_chapter_summaries(self):
+        """刷新章节总结显示"""
+        self.novel_service.refresh_chapter_summaries()
     
     # def _strip_chapter_prefix(self, title_text): -> moved to prompt_builder
     # def _format_chapter_display(self, index, stored_title): -> moved to prompt_builder
@@ -291,10 +314,9 @@ class NovelGeneratorApp:
         """检查当前章节是否有未保存的更改"""
         return self.novel_service.has_unsaved_changes()
     
-    def on_chapter_selected(self, event=None):
-        """列表选择变化时，自动同步创作提示与生成内容"""
-        print(f"[调试] main.py on_chapter_selected 被调用")
-        self.novel_service.on_chapter_selected(event)
+    def on_chapter_selected(self, event=None, source="plan"):
+        """列表选择变化时，同步双页面的选择状态"""
+        self.novel_service.on_chapter_selected(event, source=source)
     
     def save_current_chapter(self):
         """将当前编辑器中的提示与内容保存到当前选中的章节，并写入小说文件"""
@@ -318,6 +340,10 @@ class NovelGeneratorApp:
     def clear_content(self):
         """清空生成内容"""
         self.novel_service.clear_content()
+
+    def generate_outline(self):
+        """AI 生成大纲（标题、概述、高潮、钩子）"""
+        self.generation_service.generate_outline()
 
     def create_new_novel(self):
         """弹出创建小说对话框：选择目录并创建小说配置"""

@@ -431,9 +431,9 @@ def create_ai_settings_page(app, parent, default_temperature, default_max_tokens
     app.max_tokens_var = tk.IntVar(value=default_max_tokens)
     max_tokens_spin = tk.Spinbox(
         settings_frame,
-        from_=100,
-        to=5000,
-        increment=100,
+        from_=1000,
+        to=10000,
+        increment=500,
         textvariable=app.max_tokens_var,
         width=20,
         font=("Microsoft YaHei", 10)
@@ -443,7 +443,7 @@ def create_ai_settings_page(app, parent, default_temperature, default_max_tokens
     # 说明
     tokens_info = tk.Label(
         settings_frame,
-        text="控制生成内容的最大长度（100-5000）",
+        text="控制生成内容的最大长度（1000-10000）",
         font=("Microsoft YaHei", 9),
         fg="gray"
     )

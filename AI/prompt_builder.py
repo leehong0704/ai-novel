@@ -8,7 +8,7 @@ class PromptBuilder:
     """提示词构建器类"""
 
     @staticmethod
-    def build_system_prompt(novel_type, writing_style, word_count=2000):
+    def build_system_prompt(novel_type, writing_style, word_count=4000):
         """
         构建系统提示词
         
@@ -27,7 +27,7 @@ class PromptBuilder:
     2. 写作风格：{writing_style}
     3. 严格按照【当前章节创作提示】写作小说内容
     4. 注意与前后章节的连贯性，做好承上启下
-    5. 请直接输出小说标题和正文内容，不要添加任何说明性文字
+    5. 请直接输出正文内容，不要包含标题或任何说明性文字
     6. 每个章节字数在{word_count}字左右
     """
         return system_prompt
@@ -132,7 +132,7 @@ class PromptBuilder:
         return "\n".join(lines).strip()
 
     @staticmethod
-    def build_user_prompt(instruction, chapter_list=None, current_index=None, settings="", chapter_title="", current_chapter_content=""):
+    def build_user_prompt(instruction, chapter_list=None, current_index=None, settings="", chapter_title="", current_chapter_content="", chapter_plan=None):
         """
         构建用户提示词
         
@@ -143,6 +143,7 @@ class PromptBuilder:
             settings (str, optional): 相关设定（小说设定、人物设定等）
             chapter_title (str, optional): 当前章节标题
             current_chapter_content (str, optional): 当前章节已有的内容（用于续写）
+            chapter_plan (dict, optional): 章节策划信息（高潮、钩子、场景）
             
         Returns:
             str: 格式化后的用户提示词
@@ -151,44 +152,144 @@ class PromptBuilder:
         
         # 1. 设定信息（如果有）
         if settings:
-            parts.append(f"相关设定：\n{settings}")
+            parts.append(f"【相关设定】\n{settings}")
         
         # 2. 前一章的创作提示
         prev_prompt = PromptBuilder.get_previous_chapter_prompt(chapter_list, current_index)
         if prev_prompt:
-            parts.append(f"前一章创作提示：\n{prev_prompt}")
+            parts.append(f"【前一章创作提示】\n{prev_prompt}")
         
-        # 3. 当前章节信息
-        if chapter_title:
-            parts.append(f"当前章节标题：{chapter_title}")
-        
-        # 4. 当前章节已有内容（续写时）
+        # 3. 章节策划（高潮、钩子、概述）
+        if chapter_plan or instruction:
+            plan_str = ""
+            if chapter_plan and chapter_plan.get("climax"): plan_str += f"- 本章高潮：{chapter_plan['climax']}\n"
+            if chapter_plan and chapter_plan.get("hook"): plan_str += f"- 本章钩子：{chapter_plan['hook']}\n"
+            
+            # 使用 instruction (即内容概述)
+            if instruction:
+                plan_str += f"- 内容概述：\n{instruction}\n"
+                
+            if plan_str:
+                parts.append(f"【本章剧情策划】\n{plan_str.strip()}")
+
+        # 5. 前三章摘要 (增强上下文)
+        if chapter_list and current_index is not None and current_index > 0:
+            sum_parts = []
+            cur_start = max(0, current_index - 3)
+            for i in range(cur_start, current_index):
+                ch = chapter_list[i]
+                ch_title = ch.get('title', f'第{i+1}章')
+                # 优先使用精炼摘要，无摘要则使用原概述
+                ch_sum = ch.get('summary', '').strip() or ch.get('prompt', '').strip()
+                if ch_sum:
+                    sum_parts.append(f"- {ch_title}: {ch_sum}")
+            
+            if sum_parts:
+                parts.append("【前序章节背景（最近3章精华回顾）】\n" + "\n".join(sum_parts))
+
+        # 6. 当前章节已有内容（续写时）
         if current_chapter_content:
-            parts.append(f"当前章节已有内容：\n{current_chapter_content}")
+            parts.append(f"【当前章节已有内容】：\n{current_chapter_content}")
         
-        # 5. 当前章节的写作指导/提示
-        if instruction:
-            parts.append(f"当前章节创作提示：\n{instruction}")
-        
-        # 6. 后一章的内容提示
+        # 7. 后一章的内容提示
         next_prompt = PromptBuilder.get_next_chapter_prompt(chapter_list, current_index)
         if next_prompt:
-            parts.append(f"后续章节提示（供参考，确保内容连贯）：\n{next_prompt}")
+            parts.append(f"【后续章节剧情参考】：\n{next_prompt}")
         
-        # 7. 总结指令
+        # 8. 总结指令
         reference_parts = []
-        if settings:
-            reference_parts.append("【相关设定】")
-        if prev_prompt:
-            reference_parts.append("【前一章创作提示】")
-        if instruction:
-            reference_parts.append("【当前章节创作提示】")
+        if settings: reference_parts.append("相关设定")
+        if prev_prompt: reference_parts.append("前一章创作提示")
+        if chapter_plan or instruction: reference_parts.append("本章剧情策划")
         
         if reference_parts:
             ref_str = "、".join(reference_parts)
-            parts.append(f"请根据上述{ref_str}，创作本章节内容。注意与前后章节保持连贯，为后续章节做好铺垫。")
+            parts.append(f"请根据上述{ref_str}以及前三章的剧情回顾，创作本章节内容。要求情节跌宕起伏，逻辑自洽，注意与前文紧密承接。")
         else:
-            parts.append("请创作本章节内容。注意与前后章节保持连贯，为后续章节做好铺垫。")
+            parts.append("请创作本章节内容。注意与前三章剧情回顾保持连贯，为后续章节做好铺垫。")
         
         return "\n\n".join(parts)
 
+    @staticmethod
+    def build_outline_prompt(chapter_title, chapter_list=None, current_index=None, settings=""):
+        """
+        构建生成章节大纲/概述的提示词
+        
+        Args:
+            chapter_title (str): 当前章节标题
+            chapter_list (list, optional): 已有章节列表
+            current_index (int, optional): 当前章节索引
+            settings (str, optional): 相关设定
+            
+        Returns:
+            str: 格式化后的提示词
+        """
+        parts = []
+        
+        if settings:
+            parts.append(f"【背景设定】\n{settings}")
+            
+        # 提供前三章的摘要作为上下文
+        if chapter_list and current_index is not None and current_index > 0:
+            context_parts = ["【前序章节剧情回顾（最近3章）】"]
+            start = max(0, current_index - 3)
+            for i in range(start, current_index):
+                ch = chapter_list[i]
+                title = ch.get('title', f'第{i+1}章')
+                # 优先使用本章摘要
+                summary = ch.get('summary', '').strip() or ch.get('prompt', '（无概述）')
+                context_parts.append(f"- {title}: {summary}")
+            parts.append("\n".join(context_parts))
+
+        parts.append(f"【当前任务】\n请为新章节构思详细的剧情大纲。要求：\n1. 情节与前文高度连贯且符合逻辑。\n2. 充满戏剧张力，能吸引读者。")
+        
+        parts.append("请按以下格式输出（严格按此标签分隔）：\n【章节标题】：（一个吸引人的标题）\n【内容概述】：（在这里详细写本章发生的故事）\n【章节高潮】：（本章最精彩的一幕）\n【章节钩子】：（本章结尾留下的悬念）")
+        
+        return "\n\n".join(parts)
+    @staticmethod
+    def build_modification_prompt(content, instruction, settings=""):
+        """
+        构建正文修改/润色的提示词
+        
+        Args:
+            content (str): 待修改的正文内容
+            instruction (str): 具体的修改要求
+            settings (str, optional): 相关世界观/人物设定背景
+            
+        Returns:
+            str: 格式化后的提示词
+        """
+        parts = []
+        if settings:
+            parts.append(f"【参考设定】\n{settings}")
+            
+        parts.append(f"【原正文内容】\n{content}")
+        parts.append(f"【整体修改要求】\n{instruction if instruction else '按照文中内联指令进行局部微调或全文润色'}")
+        
+        parts.append("【处理指令】\n1. 如果正文中包含形如 【修改建议】 或 [[建议]] 的标记，请将该标记及其对应的片段按照建议进行重写。\n2. 保持原有的人设和叙事逻辑。\n3. 直接输出修改或润色后的完整正文内容。\n4. 输出中严禁保留任何原有的指令标记或说明性括号。")
+        
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def build_chapter_summary_prompt(content):
+        """
+        第一步：根据正文生成本章摘要
+        """
+        parts = ["【创作定稿任务：本章摘要生成】"]
+        parts.append(f"请根据以下本章正文内容，生成一段精准、详尽的章节摘要（约200-400字），要求覆盖章节的核心剧情、转折和重要细节，以便作为后续创作的上下文参考。")
+        parts.append(f"【本章正文素材】：\n{content}")
+        parts.append("直接输出摘要内容即可，无需额外说明。")
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def build_global_summary_update_prompt(old_global, chapter_summary):
+        """
+        第二步：合并旧全局摘要和新本章摘要，生成新的全局摘要
+        """
+        parts = ["【创作定稿任务：更新全局摘要】"]
+        parts.append("你现在的任务是更新整部小说的全文提要（全局摘要）。")
+        parts.append(f"【之前的全局摘要】：\n{old_global or '（暂无）'}")
+        parts.append(f"【本章新增摘要内容】：\n{chapter_summary}")
+        parts.append("【处理指令】\n1. 请将本章新增的摘要内容合并到原有的全局摘要中，形成一个完整的、最新的全书剧情梗概。\n2. 保持叙事连贯性，精炼语言，突出重点。\n3. 如果正文中包含重大的世界观揭露或人设发展，请在摘要中体现。")
+        parts.append("请直接输出更新后的完整全局摘要。")
+        return "\n\n".join(parts)

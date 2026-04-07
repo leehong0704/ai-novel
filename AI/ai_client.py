@@ -115,6 +115,20 @@ class AIClient:
                     if "choices" in result and len(result["choices"]) > 0:
                         generated_text = result["choices"][0]["message"]["content"]
                         print(f"[调试] API返回成功，内容长度: {len(generated_text)} 字符")
+                        
+                        # 打印token使用情况
+                        if "usage" in result:
+                            usage = result["usage"]
+                            prompt_tokens = usage.get("prompt_tokens", 0)
+                            completion_tokens = usage.get("completion_tokens", 0)
+                            total_tokens = usage.get("total_tokens", 0)
+                            print(f"[调试] Token使用情况:")
+                            print(f"  - 输入Token数: {prompt_tokens}")
+                            print(f"  - 输出Token数: {completion_tokens} (限制: {max_tokens})")
+                            print(f"  - 总Token数: {total_tokens}")
+                            if completion_tokens >= max_tokens * 0.9:
+                                print(f"[警告] 输出Token数接近限制，可能被截断！")
+                        
                         return generated_text.strip()
                     else:
                         print(f"[错误] API返回格式异常: {result}")
