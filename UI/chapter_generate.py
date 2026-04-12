@@ -147,16 +147,31 @@ def create_chapter_generate_page(app, parent):
     app.recent_summary_text = scrolledtext.ScrolledText(summary_scroll_container, height=6, font=("Microsoft YaHei", 10), wrap=tk.WORD)
     app.recent_summary_text.pack(fill=tk.X, pady=(0, 15))
     
-    # 3. 角色状态
-    tk.Label(summary_scroll_container, text="👤 角色状态 (当前各角色所处情况)：", font=("Microsoft YaHei", 10, "bold"), fg="#fd7e14").pack(anchor=tk.W, pady=(5, 5))
-    app.char_status_text = scrolledtext.ScrolledText(summary_scroll_container, height=6, font=("Microsoft YaHei", 10), wrap=tk.WORD)
-    app.char_status_text.pack(fill=tk.X, pady=(0, 15))
+    # 3. 角色动态与关系
+    char_info_frame = tk.Frame(summary_scroll_container)
+    char_info_frame.pack(fill=tk.X, pady=(5, 10))
+    char_info_frame.columnconfigure(0, weight=1)
+    char_info_frame.columnconfigure(1, weight=1)
+
+    # 角色动态
+    status_col = tk.Frame(char_info_frame)
+    status_col.grid(row=0, column=0, sticky=tk.NSEW, padx=(0, 5))
+    tk.Label(status_col, text="👤 人物经历/动态 (修为/道具/变化)：", font=("Microsoft YaHei", 9, "bold"), fg="#fd7e14").pack(anchor=tk.W)
+    app.char_status_text = scrolledtext.ScrolledText(status_col, height=6, font=("Microsoft YaHei", 10), wrap=tk.WORD)
+    app.char_status_text.pack(fill=tk.X)
+
+    # 角色关系
+    relation_col = tk.Frame(char_info_frame)
+    relation_col.grid(row=0, column=1, sticky=tk.NSEW, padx=(5, 0))
+    tk.Label(relation_col, text="🤝 角色关系 (恩怨/进展)：", font=("Microsoft YaHei", 9, "bold"), fg="#6f42c1").pack(anchor=tk.W)
+    app.char_relations_text = scrolledtext.ScrolledText(relation_col, height=6, font=("Microsoft YaHei", 10), wrap=tk.WORD)
+    app.char_relations_text.pack(fill=tk.X)
 
     # 摘要页按钮
     summary_btn_container = tk.Frame(summary_tab)
     summary_btn_container.pack(fill=tk.X, pady=(10, 0))
     
-    app.generate_summary_btn = tk.Button(
+    app.finalize_btn = tk.Button(
         summary_btn_container,
         text="✨ 生成/更新定稿摘要",
         command=app.finalize_content,
@@ -166,7 +181,18 @@ def create_chapter_generate_page(app, parent):
         height=2,
         cursor="hand2"
     )
-    app.generate_summary_btn.pack(fill=tk.X)
+    app.finalize_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+
+    tk.Button(
+        summary_btn_container,
+        text="👤 同步动态到档案",
+        command=lambda: app.novel_service.update_character_profile_status(app.char_status_text.get("1.0", tk.END).strip()),
+        font=("Microsoft YaHei", 10, "bold"),
+        bg="#fd7e14",
+        fg="white",
+        height=2,
+        cursor="hand2"
+    ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
 
     # 初始化变量
     app.current_chapter_index = None

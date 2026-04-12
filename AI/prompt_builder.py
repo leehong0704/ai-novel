@@ -3,6 +3,7 @@
 负责构建系统提示词和用户提示词
 """
 import re
+import datetime
 
 class PromptBuilder:
     """提示词构建器类"""
@@ -182,10 +183,15 @@ class PromptBuilder:
                 # 优先使用精炼摘要，无摘要则使用原概述
                 ch_sum = ch.get('summary', '').strip() or ch.get('prompt', '').strip()
                 if ch_sum:
-                    sum_parts.append(f"- {ch_title}: {ch_sum}")
+                    sum_parts.append(f"- {ch_title}剧情: {ch_sum}")
+                    
+                    # 仅附加本章后的关系快照（状态已累加至档案，此处移除以去重）
+                    ch_rel = ch.get('char_relations', '').strip()
+                    if ch_rel:
+                        sum_parts.append(f"  * 角色关系变动: {ch_rel}")
             
             if sum_parts:
-                parts.append("【前序章节背景（最近3章精华回顾）】\n" + "\n".join(sum_parts))
+                parts.append("【前序章节背景（剧情、状态及关系回顾）】\n" + "\n".join(sum_parts))
 
         # 6. 当前章节已有内容（续写时）
         if current_chapter_content:
@@ -290,6 +296,40 @@ class PromptBuilder:
         parts.append("你现在的任务是更新整部小说的全文提要（全局摘要）。")
         parts.append(f"【之前的全局摘要】：\n{old_global or '（暂无）'}")
         parts.append(f"【本章新增摘要内容】：\n{chapter_summary}")
-        parts.append("【处理指令】\n1. 请将本章新增的摘要内容合并到原有的全局摘要中，形成一个完整的、最新的全书剧情梗概。\n2. 保持叙事连贯性，精炼语言，突出重点。\n3. 如果正文中包含重大的世界观揭露或人设发展，请在摘要中体现。")
+        parts.append("【处理指令】\n1. 请将本章新增的摘要内容合并到原有的全局摘要中，形成一个完整的、最新的全书剧情梗概。\n2. 保持叙事连贯性，精炼语言。")
         parts.append("请直接输出更新后的完整全局摘要。")
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def build_char_status_update_prompt(old_status, chapter_summary, chapter_num):
+        """
+        第三步：增量更新人物经历日志（AI 输出简化格式：@角色名#变动内容）
+        """
+        parts = ["【创作定稿任务：提炼人物经历变动】"]
+        parts.append("任务：根据本章剧情精华，提炼各角色的关键经历变动。")
+        parts.append(f"【参考历史经历】：\n{old_status or '（暂无）'}")
+        parts.append(f"【本章剧情精华】：\n{chapter_summary}")
+        parts.append(f"【当前章节】：第{chapter_num}章")
+        parts.append("【输出解析格式（极其重要）】\n"
+                     "1. 【一章一人一条】：每名角色在本章只能有且仅有一行输出。严禁为同一角色生成多行记录。\n"
+                     "2. 【全景汇总】：请用简洁的语言在一个记录块中汇总该角色在本章的所有关键点，多个事件用分号（；）隔开。\n"
+                     "3. 【禁止合并人名】：严禁将多个角色名字合并在 @ 后面（如：@杨帆和李媛媛# 是错误的）。\n"
+                     "4. 【格式】：@角色名#经历汇总描述\n"
+                     "5. 【正确示例】：@杨帆#进入英华高中开始寄宿生活；在篮球场展现出色素质；英语摸底考不及格但有进步，接受李媛媛一对一补习。\n"
+                     "6. 注意：描述中不要再包含 @ 符号，也不要包含章节号。")
+        parts.append("请直接输出由 <RECORDS> 标签包裹的、每人只有一行的记录列表。")
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def build_char_relations_update_prompt(old_relations, chapter_summary, chapter_num):
+        """
+        第四步：增量更新人物关系演变
+        """
+        parts = ["【创作定稿任务：更新人物关系网络】"]
+        parts.append("任务：维护人物间的关系动态（恩怨、情感、派系）。")
+        parts.append(f"【原有关系网络】：\n{old_relations or '（暂无）'}")
+        parts.append(f"【本章剧情精华】：\n{chapter_summary}")
+        parts.append(f"【当前章节】：第{chapter_num}章")
+        parts.append("【关键指令】\n1. 仅提取本章产生的核心关系变动（如敌友转折、重要邂逅）。\n2. **强制要求**：本章的新增记录必须【极简且短小】。\n3. 严格遵循格式：第{chapter_num}章：[简短描述]。\n4. 保持历史记录不变，仅在末尾做增量补充。")
+        parts.append("请直接输出更新后的完整人物关系网络。")
         return "\n\n".join(parts)

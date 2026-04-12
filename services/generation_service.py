@@ -111,14 +111,18 @@ class GenerationService:
             # 组织已勾选的“小说设定/人物设定”
             settings_section = ""
             try:
-                # 获取选中的设定
+                # 获取选中的设定 (仅包含已勾选且内容不为空的项)
                 novel_selected = {}
                 if hasattr(self.app, "novel_setting_checked") and hasattr(self.app, "novel_setting_details"):
-                    novel_selected = {n: self.app.novel_setting_details.get(n,'') for n, v in self.app.novel_setting_checked.items() if v}
+                    novel_selected = {n: self.app.novel_setting_details.get(n,'') 
+                                     for n, v in self.app.novel_setting_checked.items() 
+                                     if v and self.app.novel_setting_details.get(n,'').strip()}
                 
                 char_selected = {}
                 if hasattr(self.app, "character_setting_checked") and hasattr(self.app, "character_setting_details"):
-                    char_selected = {n: self.app.character_setting_details.get(n,'') for n, v in self.app.character_setting_checked.items() if v}
+                    char_selected = {n: self.app.character_setting_details.get(n,'') 
+                                    for n, v in self.app.character_setting_checked.items() 
+                                    if v and self.app.character_setting_details.get(n,'').strip()}
                 
                 settings_section = PromptBuilder.build_settings_content(novel_selected, char_selected)
             except Exception:
@@ -846,54 +850,90 @@ class GenerationService:
                         self.app.root.after(0, lambda: messagebox.showerror("第一步失败", ch_summary))
                         return
 
-                    # --- 第二步：更新全局摘要 ---
+                    # --- 第二步：更新全局摘要 (剧情) ---
                     self.app.root.after(0, lambda: self.app.finalize_btn.config(text="⌛ 正在更新全局提要...") if hasattr(self.app, "finalize_btn") else None)
-                    
                     step2_prompt = PromptBuilder.build_global_summary_update_prompt(old_global, ch_summary)
                     global_summary = self.app.ai_client.generate_content(
-                        system_prompt="你是一位资深文学顾问，负责维护小说的全文主线一致性。",
+                        system_prompt="你是一位定稿专家，负责合并剧情摘要。",
                         user_prompt=step2_prompt,
                         temperature=0.3,
                         max_tokens=2000
+                    )
+
+                    # --- 第三步：增量更新人物动态 ---
+                    self.app.root.after(0, lambda: self.app.finalize_btn.config(text="⌛ 正在更新角色动态...") if hasattr(self.app, "finalize_btn") else None)
+                    old_status = ""
+                    if current_idx > 0:
+                        old_status = chapter_list[current_idx-1].get("char_status", "").strip()
+                    
+                    step3_prompt = PromptBuilder.build_char_status_update_prompt(old_status, ch_summary, current_idx + 1)
+                    new_char_status = self.app.ai_client.generate_content(
+                        system_prompt="你是一个严谨的档案员，负责记录角色状态变迁。",
+                        user_prompt=step3_prompt,
+                        temperature=0.3,
+                        max_tokens=1500
+                    )
+
+                    # --- 第四步：增量更新人物关系 ---
+                    self.app.root.after(0, lambda: self.app.finalize_btn.config(text="⌛ 正在更新人物关系...") if hasattr(self.app, "finalize_btn") else None)
+                    old_relations = ""
+                    if current_idx > 0:
+                        old_relations = chapter_list[current_idx-1].get("char_relations", "").strip()
+                    
+                    step4_prompt = PromptBuilder.build_char_relations_update_prompt(old_relations, ch_summary, current_idx + 1)
+                    new_char_relations = self.app.ai_client.generate_content(
+                        system_prompt="你是一个关系分析师，负责梳理人物情感纠葛。",
+                        user_prompt=step4_prompt,
+                        temperature=0.3,
+                        max_tokens=1500
                     )
 
                     def on_success():
                         self._post_generation_cleanup()
                         if hasattr(self.app, "finalize_btn"):
                             self.app.finalize_btn.config(state=tk.NORMAL, text="📝 章节定稿")
-                        if hasattr(self.app, "generate_summary_btn"):
-                            self.app.generate_summary_btn.config(state=tk.NORMAL, text="✨ 生成/更新定稿摘要")
                         
-                        if global_summary.startswith("❌"):
-                            messagebox.showerror("第二步失败", global_summary)
-                            return
+                        # 错误检查
+                        for res, label in [(global_summary, "全局摘要"), (new_char_status, "人物动态"), (new_char_relations, "人物关系")]:
+                            if res.startswith("❌"):
+                                messagebox.showerror(f"{label}更新失败", res)
+                                return
                         
-                        # 更新显示
+                        # 同步 UI
                         if hasattr(self.app, "global_summary_text"):
                             self.app.global_summary_text.delete("1.0", tk.END)
                             self.app.global_summary_text.insert("1.0", global_summary.strip())
-                            
                         if hasattr(self.app, "recent_summary_text"):
                             self.app.recent_summary_text.delete("1.0", tk.END)
                             self.app.recent_summary_text.insert("1.0", ch_summary.strip())
+                        if hasattr(self.app, "char_status_text"):
+                            self.app.char_status_text.delete("1.0", tk.END)
+                            # 强化标签清洗：正则无视大小写和多余空格
+                            import re
+                            display_status = re.sub(r'</?RECORDS>', '', new_char_status, flags=re.IGNORECASE).strip()
+                            self.app.char_status_text.insert("1.0", display_status)
+                        
+                        # --- 同步累加到人物档案 (Setting) ---
+                        self.app.novel_service.update_character_profile_status(new_char_status.strip())
+
+                        if hasattr(self.app, "char_relations_text"):
+                            self.app.char_relations_text.delete("1.0", tk.END)
+                            self.app.char_relations_text.insert("1.0", new_char_relations.strip())
                             
-                        # 更新章节元数据
+                        # 同步数据
                         if 0 <= current_idx < len(self.app.chapter_list):
                             self.app.chapter_list[current_idx]["global_summary"] = global_summary.strip()
                             self.app.chapter_list[current_idx]["summary"] = ch_summary.strip()
+                            self.app.chapter_list[current_idx]["char_status"] = new_char_status.strip()
+                            self.app.chapter_list[current_idx]["char_relations"] = new_char_relations.strip()
                             
-                            # 角色状态暂时不自动生成，由用户手动维护或后续增加独立功能
+                            self.app.novel_service._persist_chapters_to_novel()
                             
-                            # 同步到配置文件
-                            if hasattr(self.app, "novel_service"):
-                                self.app.novel_service._persist_chapters_to_novel()
-                                
-                            # 可选：也同步更新到“小说设置”中的剧情主线
                             if hasattr(self.app, "novel_outline_text"):
                                 self.app.novel_outline_text.delete("1.0", tk.END)
                                 self.app.novel_outline_text.insert("1.0", global_summary.strip())
                         
-                        messagebox.showinfo("成功", "✅ 章节定稿完成！\n\n1. 已生成本章独立摘要。\n2. 已基于前文更新全局摘要。")
+                        messagebox.showinfo("成功", "✅ 章节定稿完成！\n\n- 已生成本章摘要\n- 已增量更新全文提要、人物动态及关系网。")
 
                     self.app.root.after(0, on_success)
                     

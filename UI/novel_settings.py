@@ -189,4 +189,3 @@ def create_novel_settings_page(app, parent):
     export_btn.grid(row=0, column=3, sticky=tk.EW, padx=5)
 
 
-

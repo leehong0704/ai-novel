@@ -60,6 +60,10 @@ class PersistenceService:
                 config.remove_section("CHAPTER_HOOKS")
             if "CHAPTER_SCENES" in config:
                 config.remove_section("CHAPTER_SCENES")
+            if "CHAPTER_CHAR_STATUSES" in config:
+                config.remove_section("CHAPTER_CHAR_STATUSES")
+            if "CHAPTER_CHAR_RELATIONS" in config:
+                config.remove_section("CHAPTER_CHAR_RELATIONS")
             if "CHAPTER_NUMS" in config:
                 config.remove_section("CHAPTER_NUMS")
             
@@ -69,6 +73,8 @@ class PersistenceService:
             config.add_section("CHAPTER_CLIMAXES")
             config.add_section("CHAPTER_HOOKS")
             config.add_section("CHAPTER_SCENES")
+            config.add_section("CHAPTER_CHAR_STATUSES")
+            config.add_section("CHAPTER_CHAR_RELATIONS")
             config.add_section("CHAPTER_NUMS")
             
             # 保存每个章节
@@ -97,6 +103,9 @@ class PersistenceService:
                 config.set("CHAPTER_CLIMAXES", str(idx), climax)
                 config.set("CHAPTER_HOOKS", str(idx), hook)
                 config.set("CHAPTER_SCENES", str(idx), scenes.replace("\n", "[\\n]")) # 转义换行
+                config.set("CHAPTER_GLOBAL_SUMMARIES", str(idx), str(chapter.get("global_summary", "")))
+                config.set("CHAPTER_CHAR_STATUSES", str(idx), str(chapter.get("char_status", "")))
+                config.set("CHAPTER_CHAR_RELATIONS", str(idx), str(chapter.get("char_relations", "")))
                 config.set("CHAPTER_NUMS", str(idx), num)
             
             # 写入配置文件
@@ -164,6 +173,9 @@ class PersistenceService:
                 scenes_raw = config.get("CHAPTER_SCENES", str(idx), fallback="")
                 scenes = scenes_raw.replace("[\\n]", "\n")
                 num = config.get("CHAPTER_NUMS", str(idx), fallback=str(int(idx)+1))
+                global_summary = config.get("CHAPTER_GLOBAL_SUMMARIES", str(idx), fallback="")
+                char_status = config.get("CHAPTER_CHAR_STATUSES", str(idx), fallback="")
+                char_relations = config.get("CHAPTER_CHAR_RELATIONS", str(idx), fallback="")
 
                 # 读取内容
                 content = ""
@@ -193,7 +205,10 @@ class PersistenceService:
                     "climax": climax,
                     "hook": hook,
                     "scenes": scenes,
-                    "num": num
+                    "num": num,
+                    "global_summary": global_summary,
+                    "char_status": char_status,
+                    "char_relations": char_relations
                 })
             
             print(f"[信息] 已加载 {len(chapter_list)} 个章节")

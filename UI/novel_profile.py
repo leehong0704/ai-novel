@@ -194,27 +194,43 @@ def create_novel_profile_page(app, parent):
         win.title(dialog_title)
         win.transient(parent)
         win.grab_set()
-        app.ui_helper.center_window(win, 560, 650)
+        app.ui_helper.center_window(win, 560, 800)
 
         # 简单的内容解析（支持回填）
         fields = {
             '角色设定': '', '性别': '', '年龄': '', '身份': '',
-            '性格': '', '特点': '', '外貌': '', '服饰': ''
+            '性格': '', '特点': '', '外貌': '', '服饰': '',
+            '人物经历': ''
         }
         if initial_content:
-            lines = initial_content.splitlines()
+            # 优先解析【人物经历】或【状态变迁日志】作为人物经历
+            content_to_parse = initial_content
+            found_header = None
+            for h in ['【人物经历】', '【状态变迁日志】']:
+                if h in initial_content:
+                    found_header = h
+                    break
+            
+            if found_header:
+                parts = initial_content.split(found_header, 1)
+                content_to_parse = parts[0]
+                fields['人物经历'] = parts[1].strip()
+            
+            lines = content_to_parse.splitlines()
             for line in lines:
                 if '：' in line:
                     parts = line.split('：', 1)
                     k, v = parts[0].strip(), parts[1].strip()
-                    if k in fields:
+                    if k in fields and k != '人物经历':
+                        fields[k] = v
+                    elif k == '人物经历' and not fields['人物经历']:
                         fields[k] = v
 
         body = tk.Frame(win, padx=20, pady=15)
         body.pack(fill=tk.BOTH, expand=True)
 
         row = 0
-        def add_field(label_text, value="", field_type="entry", combo_values=None):
+        def add_field(label_text, value="", field_type="entry", combo_values=None, height=3):
             nonlocal row
             tk.Label(body, text=label_text, font=("Microsoft YaHei", 10)).grid(row=row, column=0, sticky=tk.W, pady=5)
             if field_type == "entry":
@@ -232,7 +248,7 @@ def create_novel_profile_page(app, parent):
                 row += 1
                 return var
             elif field_type == "text":
-                txt = scrolledtext.ScrolledText(body, font=("Microsoft YaHei", 10), height=3, wrap=tk.WORD)
+                txt = scrolledtext.ScrolledText(body, font=("Microsoft YaHei", 10), height=height, wrap=tk.WORD)
                 txt.grid(row=row, column=1, sticky=tk.NSEW, pady=5, padx=(10, 0))
                 txt.insert("1.0", value or "")
                 row += 1
@@ -248,10 +264,11 @@ def create_novel_profile_page(app, parent):
         gender_var = add_field("性别：", fields['性别'], field_type="combo")
         age_var = add_field("年龄：", fields['年龄'])
         identity_var = add_field("身份：", fields['身份'])
-        personality_text = add_field("性格：", fields['性格'], field_type="text")
-        trait_text = add_field("特点：", fields['特点'], field_type="text")
-        appearance_text = add_field("外貌：", fields['外貌'], field_type="text")
-        clothing_text = add_field("服饰：", fields['服饰'], field_type="text")
+        personality_text = add_field("性格：", fields['性格'], field_type="text", height=2)
+        trait_text = add_field("特点：", fields['特点'], field_type="text", height=2)
+        appearance_text = add_field("外貌：", fields['外貌'], field_type="text", height=2)
+        clothing_text = add_field("服饰：", fields['服饰'], field_type="text", height=2)
+        history_text = add_field("人物经历：", fields['人物经历'], field_type="text", height=4)
 
         body.columnconfigure(1, weight=1)
 
@@ -276,6 +293,12 @@ def create_novel_profile_page(app, parent):
             add_line("特点", trait_text)
             add_line("外貌", appearance_text)
             add_line("服饰", clothing_text)
+            
+            # 处理人物经历/状态变迁日志
+            history = history_text.get("1.0", tk.END).strip()
+            if history:
+                content_lines.append("\n【状态变迁日志】")
+                content_lines.append(history)
             
             result["value"] = (name, "\n".join(content_lines))
             win.destroy()

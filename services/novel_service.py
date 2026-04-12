@@ -173,7 +173,10 @@ class NovelService:
                 "climax": "", 
                 "hook": "", 
                 "scenes": "", 
-                "num": str(len(self.app.chapter_list) + 1)
+                "num": str(len(self.app.chapter_list) + 1),
+                "global_summary": "",
+                "char_status": "",
+                "char_relations": ""
             }
             self.app.chapter_list.append(new_chapter)
             self._persist_chapters_to_novel()
@@ -332,6 +335,10 @@ class NovelService:
                 if hasattr(self.app, 'char_status_text'):
                     self.app.char_status_text.delete("1.0", tk.END)
                     self.app.char_status_text.insert("1.0", chapter.get("char_status", ""))
+                
+                if hasattr(self.app, 'char_relations_text'):
+                    self.app.char_relations_text.delete("1.0", tk.END)
+                    self.app.char_relations_text.insert("1.0", chapter.get("char_relations", ""))
 
                 # 更新当前章节索引
                 self.app.current_chapter_index = idx
@@ -345,6 +352,7 @@ class NovelService:
                 self.app.original_global_summary = chapter.get("global_summary", "")
                 self.app.original_recent_summary = chapter.get("summary", "")
                 self.app.original_char_status = chapter.get("char_status", "")
+                self.app.original_char_relations = chapter.get("char_relations", "")
 
                 # 更新字数统计
                 if hasattr(self.app, 'update_word_count'):
@@ -387,6 +395,7 @@ class NovelService:
                 ch_global_summary = self.app.global_summary_text.get("1.0", tk.END).strip() if hasattr(self.app, 'global_summary_text') else ""
                 ch_recent_summary = self.app.recent_summary_text.get("1.0", tk.END).strip() if hasattr(self.app, 'recent_summary_text') else ""
                 ch_char_status = self.app.char_status_text.get("1.0", tk.END).strip() if hasattr(self.app, 'char_status_text') else ""
+                ch_char_relations = self.app.char_relations_text.get("1.0", tk.END).strip() if hasattr(self.app, 'char_relations_text') else ""
 
                 self.app.chapter_list[idx]["prompt"] = prompt_content
                 self.app.chapter_list[idx]["content"] = content
@@ -396,6 +405,7 @@ class NovelService:
                 self.app.chapter_list[idx]["global_summary"] = ch_global_summary
                 self.app.chapter_list[idx]["summary"] = ch_recent_summary
                 self.app.chapter_list[idx]["char_status"] = ch_char_status
+                self.app.chapter_list[idx]["char_relations"] = ch_char_relations
                 
                 # 同步列表框标题显示 (格式: 第X章 标题)
                 display_text = f"第{idx+1}章 {ch_title}"
@@ -422,6 +432,7 @@ class NovelService:
                 self.app.original_global_summary = ch_global_summary
                 self.app.original_recent_summary = ch_recent_summary
                 self.app.original_char_status = ch_char_status
+                self.app.original_char_relations = ch_char_relations
                 
                 # 保存到文件，检查是否成功
                 if not self._persist_chapters_to_novel():
@@ -474,9 +485,9 @@ class NovelService:
             curr_hook = self.app.chapter_hook_text.get("1.0", tk.END).strip() if hasattr(self.app, 'chapter_hook_text') else ""
 
             # 摘要信息检测 (新增)
-            curr_global_sum = self.app.global_summary_text.get("1.0", tk.END).strip() if hasattr(self.app, 'global_summary_text') else ""
             curr_recent_sum = self.app.recent_summary_text.get("1.0", tk.END).strip() if hasattr(self.app, 'recent_summary_text') else ""
             curr_char_status = self.app.char_status_text.get("1.0", tk.END).strip() if hasattr(self.app, 'char_status_text') else ""
+            curr_char_rel = self.app.char_relations_text.get("1.0", tk.END).strip() if hasattr(self.app, 'char_relations_text') else ""
 
             # 排除占位符文本
             if "请输入你的创作想法" in current_prompt:
@@ -489,7 +500,8 @@ class NovelService:
                     curr_hook != getattr(self.app, "original_chapter_hook", "") or
                     curr_global_sum != getattr(self.app, "original_global_summary", "") or
                     curr_recent_sum != getattr(self.app, "original_recent_summary", "") or
-                    curr_char_status != getattr(self.app, "original_char_status", ""))
+                    curr_char_status != getattr(self.app, "original_char_status", "") or
+                    curr_char_rel != getattr(self.app, "original_char_relations", ""))
         except:
             return False
     
@@ -553,6 +565,102 @@ class NovelService:
             if hasattr(self.app, '_is_handling_chapter_selection'):
                 self.app._is_handling_chapter_selection = False
     
+    def update_character_profile_status(self, status_text_raw):
+        """
+        解析状态文本并累加到角色档案中
+        采用锚点标签格式：<RECORDS> @角色#描述 </RECORDS>
+        """
+        if not status_text_raw:
+            return
+            
+        import re
+        print(f"[调试] 开始精准解析角色变动...")
+        
+        try:
+            # 1. 自动识别当前章节
+            chapter_num = 1
+            if hasattr(self.app, 'current_chapter_index') and self.app.current_chapter_index is not None:
+                chapter_num = self.app.current_chapter_index + 1
+            else:
+                # 尝试从文本中搜寻章节标记（兜底）
+                ch_match = re.search(r'第(\d+)章', status_text_raw)
+                if ch_match:
+                    chapter_num = int(ch_match.group(1))
+
+            # 2. 提取有效记录区，同时兼容全角符号
+            content_to_parse = status_text_raw.replace('＠', '@').replace('＃', '#')
+            # 移除所有标签干扰
+            content_to_parse = content_to_parse.replace('<RECORDS>', '').replace('</RECORDS>', '')
+
+            # 先按 @ 符号进行全局切割
+            record_blocks = content_to_parse.split('@')
+            
+            # 使用字典进行记录聚合，确保一章一人只有一条汇总记录
+            # 结构：{ '角色名': [经历1, 经历2, ...] }
+            char_updates_map = {} 
+
+            for block in record_blocks:
+                block = block.strip()
+                if not block or '#' not in block:
+                    continue
+                
+                parts = block.split('#', 1)
+                char_name = parts[0].strip()
+                experience = parts[1].strip()
+                
+                # 依然保持截断检测，防止解析串行
+                if '@' in experience:
+                    experience = experience.split('@', 1)[0].strip()
+                
+                if not char_name or not experience:
+                    continue
+
+                # 匹配并归类
+                if hasattr(self.app, 'character_setting_details'):
+                    for existing_name in self.app.character_setting_details.keys():
+                        if existing_name == char_name or (existing_name in char_name and len(existing_name) >= 2):
+                            if existing_name not in char_updates_map:
+                                char_updates_map[existing_name] = []
+                            # 避免重复记录完全相同的内容
+                            if experience not in char_updates_map[existing_name]:
+                                char_updates_map[existing_name].append(experience)
+
+            # 统一同步聚合后的结果
+            updated_count = 0
+            for name, exp_list in char_updates_map.items():
+                # 合并该角色在本章的所有动态
+                full_experience = "；".join(exp_list)
+                new_log_line = f"第{chapter_num}章：{full_experience}"
+                
+                old_content = self.app.character_setting_details[name]
+                if new_log_line not in old_content:
+                    header = "【人物经历】"
+                    if "【状态变迁日志】" in old_content:
+                        header = "【状态变迁日志】"
+                    
+                    if header not in old_content:
+                        new_content = old_content.strip() + f"\n\n{header}\n" + new_log_line
+                    else:
+                        new_content = old_content.strip() + "\n" + new_log_line
+                    
+                    self.app.character_setting_details[name] = new_content
+                    updated_count += 1
+                    print(f"[调试] 档案同步: {name} <- {new_log_line}")
+            
+            if updated_count > 0:
+                from services.persistence_service import PersistenceService
+                ps = PersistenceService(self.app)
+                ps.save_novel_settings()
+                print(f"[成功] 已将 {updated_count} 条经历同步至人物设定。")
+                messagebox.showinfo("同步成功", f"✅ 已成功将 {updated_count} 位角色的经历同步到档案。")
+            else:
+                messagebox.showinfo("提示", "未发现可同步的新动态（可能已同步或格式不符）。")
+                
+        except Exception as e:
+            print(f"[警告] 角色档案解析失败: {e}")
+            import traceback
+            traceback.print_exc()
+
     def _persist_chapters_to_novel(self):
         """
         将章节标题、提示、总结与内容保存到当前小说目录：
@@ -595,6 +703,8 @@ class NovelService:
                 config.remove_section("CHAPTER_GLOBAL_SUMMARIES")
             if "CHAPTER_CHAR_STATUSES" in config:
                 config.remove_section("CHAPTER_CHAR_STATUSES")
+            if "CHAPTER_CHAR_RELATIONS" in config:
+                config.remove_section("CHAPTER_CHAR_RELATIONS")
             
             config.add_section("CHAPTERS")
             config.add_section("CHAPTER_TITLES")
@@ -604,6 +714,7 @@ class NovelService:
             config.add_section("CHAPTER_HOOKS")
             config.add_section("CHAPTER_GLOBAL_SUMMARIES")
             config.add_section("CHAPTER_CHAR_STATUSES")
+            config.add_section("CHAPTER_CHAR_RELATIONS")
             
             # 保存每个章节
             for idx, chapter in enumerate(self.app.chapter_list):
@@ -634,6 +745,7 @@ class NovelService:
                 try:
                     config.set("CHAPTER_GLOBAL_SUMMARIES", str(idx), str(chapter.get("global_summary", "")))
                     config.set("CHAPTER_CHAR_STATUSES", str(idx), str(chapter.get("char_status", "")))
+                    config.set("CHAPTER_CHAR_RELATIONS", str(idx), str(chapter.get("char_relations", "")))
                 except Exception:
                     pass
             
@@ -1195,6 +1307,7 @@ class NovelService:
                     hook = cfg["CHAPTER_HOOKS"].get(str(idx), "") if "CHAPTER_HOOKS" in cfg else ""
                     global_summary = cfg["CHAPTER_GLOBAL_SUMMARIES"].get(str(idx), "") if "CHAPTER_GLOBAL_SUMMARIES" in cfg else ""
                     char_status = cfg["CHAPTER_CHAR_STATUSES"].get(str(idx), "") if "CHAPTER_CHAR_STATUSES" in cfg else ""
+                    char_relations = cfg["CHAPTER_CHAR_RELATIONS"].get(str(idx), "") if "CHAPTER_CHAR_RELATIONS" in cfg else ""
                     
                     self.app.chapter_list.append({
                         "title": PromptBuilder._strip_chapter_prefix(title), 
@@ -1204,7 +1317,8 @@ class NovelService:
                         "climax": climax,
                         "hook": hook,
                         "global_summary": global_summary,
-                        "char_status": char_status
+                        "char_status": char_status,
+                        "char_relations": char_relations
                     })
                 # 刷新UI
                 if hasattr(self.app, "refresh_chapter_listbox"):
