@@ -31,7 +31,8 @@ if exist config (
 
 echo [5/5] 正在自动打包为 ZIP 压缩包...
 set ZIP_NAME=ai-novel.zip
-powershell -NoLogo -NoProfile -Command "Compress-Archive -Path 'dist\*' -DestinationPath 'release\%ZIP_NAME%' -Force"
+if exist "release\%ZIP_NAME%" del "release\%ZIP_NAME%"
+tar -a -c -f "release\%ZIP_NAME%" -C dist .
 if errorlevel 1 goto :error
 
 echo.
